@@ -42,13 +42,8 @@ class JiraTicketDescriptionParser(object):
         return key_values
 
     def __parse(self, raw_data):
-        text_per_line = raw_data.split("\r\n")
-        cleansed_data = list(
-            map(
-                lambda x: x.split("="),
-                filter(None, text_per_line)
-            )
-        )
+        text_per_line = raw_data.replace("\r", "").split("\n")
+        cleansed_data = list(map(lambda x: x.split("="), filter(None, text_per_line)))
 
         open_bracket_indexes = []
         for i in range(len(cleansed_data)):
@@ -81,43 +76,16 @@ class JiraTicketDescriptionParser(object):
 
     @staticmethod
     def __get_resource_type(parameters):
-        keys = parameters.keys()
-        if (
-                "count" in keys and
-                "instance_type" in keys and
-                "ebs_optimized" in keys and
-                "disable_api_termination" in keys
-        ):
+        k = parameters.keys()
+        if all(x in k for x in ["count", "instance_type", "ebs_optimized", "disable_api_termination"]):
             return "EC2"
-        elif (
-                "name" in keys and
-                "security_groups" in keys and
-                "internal" in keys and
-                "idle_timeout" in keys and
-                "enable_deletion_protection" in keys
-        ):
+        elif all(x in k for x in ["name", "security_groups", "internal", "idle_timeout", "enable_deletion_protection"]):
             return "ALB"
-        elif (
-                "name" in keys and
-                "port" in keys and
-                "protocol" in keys and
-                "deregistration_delay" in keys
-        ):
+        elif all(x in k for x in ["name", "port", "protocol", "deregistration_delay"]):
             return "TG"
-        elif (
-                "port" in keys and
-                "protocol" in keys
-        ):
+        elif all(x in k for x in ["port", "protocol"]):
             return "LISTENER"
-        elif (
-                "identifier" in keys and
-                "allocated_storage" in keys and
-                "allow_major_version_upgrade" in keys and
-                "auto_minor_version_upgrade" in keys and
-                "engine_version" in keys and
-                "instance_class" in keys and
-                "maintenance_window" in keys
-        ):
+        elif all(x in k for x in ["identifier", "allocated_storage", "engine_version", "instance_class"]):
             return "RDS"
         else:
             return "UNKNOWN"
@@ -126,7 +94,7 @@ class JiraTicketDescriptionParser(object):
         description = self.client.issue(id=ticket_id).fields.description
 
         offset = 0
-        tf_codes = []
+        output = []
         while True:
             extracted_text, new_offset = self.__get_text_between_words(
                 full_text=description,
@@ -138,6 +106,6 @@ class JiraTicketDescriptionParser(object):
                 break
             else:
                 parsed = self.__parse(raw_data=extracted_text)
-                tf_codes.append(parsed)
+                output.append(parsed)
                 offset = new_offset
-        return [{self.__get_resource_type(x): x} for x in filter(None, tf_codes)]
+        return [{self.__get_resource_type(x): x} for x in filter(None, output)]

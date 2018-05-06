@@ -1,0 +1,69 @@
+{%- set cluster_role = tags.Cluster.split('-')[1] -%}
+{%- if cluster_role == "app" -%}
+    {%- set application = "java" -%}
+{%- elif cluster_role == "fe" -%}
+    {%- set application = "nodejs" -%}
+{%- elif cluster_role == "proxy" -%}
+    {%- set application = "squid" -%}
+{%- endif %}
+
+locals {
+  {{ cluster_role }}_instance_count            = "{{ count }}"
+  {{ cluster_role }}_instance_type             = "{{ instance_type }}"
+  {{ cluster_role }}_ebs_optimized             = "{{ ebs_optimized }}"
+  {{ cluster_role }}_disable_api_termination   = "{{ disable_api_termination }}"
+  {{ cluster_role }}_rbd_volume_type           = "{{ root_block_device.volume_type }}"
+  {{ cluster_role }}_rbd_volume_size           = "{{ root_block_device.volume_size }}"
+  {{ cluster_role }}_rbd_delete_on_termination = "{{ root_block_device.delete_on_termination }}"
+
+  {{ cluster_role }}_tags = {
+    Service       = "{{ tags.Service }}"
+    Cluster       = "{{ tags.Cluster }}"
+    ProductDomain = "{{ tags.ProductDomain }}"
+    Application   = "{{ tags.Application }}"
+    Environment   = "{{ tags.Environment }}"
+    Description   = "{{ tags.Description }}"
+  }
+}
+
+data "aws_ami" "{{ cluster_role }}" {
+  name_regex  = "^tvlk/ubuntu/tsi/{{ application }}/hvm/x86_64/.*"
+  most_recent = true
+}
+
+{% if cluster_role == "app" -%}
+data "aws_security_group" "tvlk-app" {
+  name = "tvlk-app"
+}
+{%- endif %}
+
+module "{{ tags.Service ~ "-" ~ cluster_role }}" {
+  source = "git::ssh://git@git.traveloka.com/source/terraform-aws-ec2-cluster.git?ref=0.3.8"
+  vpc_id = "${data.aws_vpc.production.id}"
+
+  service_role   = "{{ cluster_role }}"
+  product_domain = "${local.product_domain}"
+  service_name   = "${local.service_name}"
+
+  ami                     = "${data.aws_ami.{{ cluster_role }}.image_id}"
+  instance_count          = "${local.{{ cluster_role }}_instance_count}"
+  instance_type           = "${local.{{ cluster_role }}_instance_type}"
+  ebs_optimized           = "${local.{{ cluster_role }}_ebs_optimized}"
+  disable_api_termination = "${local.{{ cluster_role }}_disable_api_termination}"
+  key_name                = "ec2_key"
+
+  volume_size           = "${local.{{ cluster_role }}_rbd_volume_size}"
+  volume_type           = "${local.{{ cluster_role }}_rbd_volume_type}"
+  delete_on_termination = "${local.{{ cluster_role }}_rbd_delete_on_termination}"
+
+  ec2_security_group_ids = [
+    "${data.aws_security_group.default.id}",
+{%- if cluster_role == "app" %}
+    "${data.aws_security_group.tvlk-app.id}",
+{%- endif %}
+    "${aws_security_group.{{ tags.Service ~ "-" ~ cluster_role }}.id}",
+  ]
+
+  cw_alarm_action_notification_arns = ["${data.aws_sns_topic.alarm.arn}"]
+  ec2_tags                          = "${local.{{ cluster_role }}_tags}"
+}

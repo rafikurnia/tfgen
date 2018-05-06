@@ -1,0 +1,26 @@
+locals {
+  product_domain = "{{ product_domain }}"
+  service_name   = "{{ service_name }}"
+  environment    = "production"
+}
+
+{% if need_vpc == True -%}
+data "aws_vpc" "production" {
+  tags {
+    "Name"        = "prod",
+    "Environment" = "production",
+  }
+}
+{%- endif %}
+
+{% if create_ec2 == True -%}
+data "aws_security_group" "default" {
+  tags {
+    "Name" = "default-tvlk-prod",
+  }
+}
+
+data "aws_sns_topic" "alarm" {
+  name = "site-infra-notifications"
+}
+{%- endif %}

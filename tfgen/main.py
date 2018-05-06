@@ -33,7 +33,7 @@ def __tfgen(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version=VERSION)
-    parser.add_argument('--ticket-id', required=True)
+    parser.add_argument("--ticket-id", required=True, help="ticket id. Example: TOSD-3310")
     parser.set_defaults(func=__tfgen)
     args = parser.parse_args()
     try:

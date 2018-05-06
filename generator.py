@@ -26,7 +26,7 @@ class CodeGenerator(object):
             if key == "EC2":
                 need_vpc = True
                 create_ec2 = True
-            elif key == "ALB" or key == "TG" or key == "LISTENER" or key == "RDS":
+            elif key in ["ALB", "TG", "LISTENER", "RDS"]:
                 need_vpc = True
 
             if "tags" in context:

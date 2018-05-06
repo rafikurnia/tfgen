@@ -4,131 +4,158 @@ import os
 from jira import JIRA
 
 
-def get_resource_type(parameters):
-    keys = parameters.keys()
-    if (
-            "count" in keys and
-            "instance_type" in keys and
-            "ebs_optimized" in keys and
-            "disable_api_termination" in keys
-    ):
-        return "EC2"
-    elif (
-            "name" in keys and
-            "security_groups" in keys and
-            "internal" in keys and
-            "idle_timeout" in keys and
-            "enable_deletion_protection" in keys
-    ):
-        return "ALB"
-    elif (
-            "name" in keys and
-            "port" in keys and
-            "protocol" in keys and
-            "deregistration_delay" in keys
-    ):
-        return "Target Group"
-    elif (
-            "port" in keys and
-            "protocol" in keys
-    ):
-        return "Listener"
-    elif (
-            "identifier" in keys and
-            "allocated_storage" in keys and
-            "allow_major_version_upgrade" in keys and
-            "auto_minor_version_upgrade" in keys and
-            "engine_version" in keys and
-            "instance_class" in keys and
-            "maintenance_window" in keys
-    ):
-        return "RDS Postgres"
+class JiraTicketDescriptionParser(object):
+    def __init__(self, server, project, username, password):
+        self.server = server
+        self.project = project
+        self.username = username
+        self.password = password
+        self.client = self.__authenticate()
 
-
-def get_text_between(s, word, offset=0):
-    try:
-        start = s.index(word, offset) + len(word)
-        end = s.index(word, start)
-        return s[start:end], end + 1
-    except ValueError:
-        return "", 0
-
-
-def parsing(input_data):
-    open_bracket_indexes = []
-    for x in range(len(input_data)):
-        if len(input_data[x]) == 2:
-            if "{" in input_data[x][1]:
-                open_bracket_indexes.append(x)
-        elif len(input_data[x]) == 1:
-            if "{" in input_data[x][0]:
-                open_bracket_indexes.append(x)
-    close_bracket_indexes = []
-    for x in range(len(input_data)):
-        if len(input_data[x]) == 1 and "}" in input_data[x][0]:
-            close_bracket_indexes.append(x)
-    if len(open_bracket_indexes) != len(close_bracket_indexes):
-        raise IndexError("Don't have matching bracket")
-
-    kvs = {}
-    offset = 0
-    for x in range(len(open_bracket_indexes)):
-        nested_data = input_data[open_bracket_indexes[x] - offset:close_bracket_indexes[x] - offset]
-        del input_data[open_bracket_indexes[x] - offset:close_bracket_indexes[x] + 1 - offset]
-        offset = offset + close_bracket_indexes[x] - open_bracket_indexes[x] + 1
-        kvs[nested_data[0][0].replace("{", "").strip()] = formatting(nested_data[1:])
-    return {**kvs, **formatting(input_data)}
-
-
-def formatting(key_value):
-    keys = {}
-    for kv in key_value:
-        if len(kv) != 2:
-            continue
-        keys[kv[0].strip().replace("\"", "").replace("'", "")] = kv[1].strip().replace("\"", "").replace("'", "")
-    return keys
-
-
-def get_all_codes(ticket_id):
-    config_file = os.getenv("HOME") + "/.opscli/config.json"
-
-    with open(config_file) as json_data:
-        config = json.load(json_data)
-
-    client = JIRA(
-        server=config["jira"]["server"],
-        basic_auth=(
-            config["jira"]["username"],
-            config["jira"]["password"]
-        ),
-        max_retries=1
-    )
-    client.project(config["jira"]["project"])
-    description = client.issue(id=ticket_id).fields.description
-    codes = []
-    offset = 0
-    while True:
-        return_value, new_offset = get_text_between(description, "{code}", offset=offset)
-        if return_value != "":
-            key_value = list(
-                map(
-                    lambda x: x.split("="),
-                    filter(
-                        None,
-                        return_value.split("\r\n")
-                    )
-                )
+    def __authenticate(self):
+        client = JIRA(
+            server=self.server,
+            basic_auth=(
+                self.username,
+                self.password
             )
-            parsed = parsing(key_value)
-            codes.append(parsed)
-            offset = new_offset
+        )
+        client.project(self.project)
+        return client
+
+    @staticmethod
+    def __get_text_between_words(full_text, first_word, second_word, offset=0):
+        try:
+            start_index = full_text.index(first_word, offset) + len(first_word)
+            end_index = full_text.index(second_word, start_index)
+            return full_text[start_index:end_index], end_index + 1
+        except ValueError:
+            return "", 0
+
+    @staticmethod
+    def __reformat(list_of_key_values):
+        key_values = {}
+        for kvs in list_of_key_values:
+            if len(kvs) != 2:
+                continue
+            else:
+                key = kvs[0].strip().replace("\"", "").replace("'", "")
+                value = kvs[1].strip().replace("\"", "").replace("'", "")
+                key_values[key] = value
+        return key_values
+
+    def __parse(self, raw_data):
+        text_per_line = raw_data.split("\r\n")
+        cleansed_data = list(
+            map(
+                lambda x: x.split("="),
+                filter(None, text_per_line)
+            )
+        )
+
+        open_bracket_indexes = []
+        for i in range(len(cleansed_data)):
+            if len(cleansed_data[i]) == 2 and "{" in cleansed_data[i][1]:
+                open_bracket_indexes.append(i)
+            elif len(cleansed_data[i]) == 1 and "{" in cleansed_data[i][0]:
+                open_bracket_indexes.append(i)
+
+        close_bracket_indexes = []
+        for i in range(len(cleansed_data)):
+            if len(cleansed_data[i]) == 1 and "}" in cleansed_data[i][0]:
+                close_bracket_indexes.append(i)
+
+        if len(open_bracket_indexes) != len(close_bracket_indexes):
+            raise IndexError("Don't have symmetric bracket")
+
+        key_values = {}
+        offset = 0
+        for i in range(len(open_bracket_indexes)):
+            nested_data = cleansed_data[open_bracket_indexes[i] - offset:close_bracket_indexes[i] - offset]
+            del cleansed_data[open_bracket_indexes[i] - offset:close_bracket_indexes[i] + 1 - offset]
+            offset = offset + close_bracket_indexes[i] - open_bracket_indexes[i] + 1
+
+            key = nested_data[0][0].replace("{", "").strip()
+            value = self.__reformat(list_of_key_values=nested_data[1:])
+            key_values[key] = value
+        return {**key_values, **self.__reformat(list_of_key_values=cleansed_data)}
+
+    @staticmethod
+    def __get_resource_type(parameters):
+        keys = parameters.keys()
+        if (
+                "count" in keys and
+                "instance_type" in keys and
+                "ebs_optimized" in keys and
+                "disable_api_termination" in keys
+        ):
+            return "EC2"
+        elif (
+                "name" in keys and
+                "security_groups" in keys and
+                "internal" in keys and
+                "idle_timeout" in keys and
+                "enable_deletion_protection" in keys
+        ):
+            return "ALB"
+        elif (
+                "name" in keys and
+                "port" in keys and
+                "protocol" in keys and
+                "deregistration_delay" in keys
+        ):
+            return "Target Group"
+        elif (
+                "port" in keys and
+                "protocol" in keys
+        ):
+            return "Listener"
+        elif (
+                "identifier" in keys and
+                "allocated_storage" in keys and
+                "allow_major_version_upgrade" in keys and
+                "auto_minor_version_upgrade" in keys and
+                "engine_version" in keys and
+                "instance_class" in keys and
+                "maintenance_window" in keys
+        ):
+            return "RDS Postgres"
         else:
-            break
-    return list(filter(None, codes))
+            return "UNKNOWN"
+
+    def parse(self, ticket_id):
+        description = self.client.issue(id=ticket_id).fields.description
+
+        offset = 0
+        tf_codes = []
+        while True:
+            extracted_text, new_offset = self.__get_text_between_words(
+                full_text=description,
+                first_word="{code}",
+                second_word="{code}",
+                offset=offset
+            )
+            if extracted_text == "":
+                break
+            else:
+                parsed = self.__parse(raw_data=extracted_text)
+                tf_codes.append(parsed)
+                offset = new_offset
+        return [{self.__get_resource_type(x): x} for x in filter(None, tf_codes)]
 
 
 if __name__ == "__main__":
-    ret = get_all_codes("TOSD-3304")
-    for r in ret:
-        print(get_resource_type(r))
-    print(json.dumps(ret, indent=4))
+    config_file = os.getenv("HOME") + "/.opscli/config.json"
+    with open(config_file) as json_data:
+        config = json.load(json_data)
+
+    output = JiraTicketDescriptionParser(
+        server=config["jira"]["server"],
+        project=config["jira"]["project"],
+        username=config["jira"]["username"],
+        password=config["jira"]["password"],
+    ).parse(
+        ticket_id="TOSD-3310"
+    )
+
+    print(json.dumps(output, indent=4))

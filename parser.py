@@ -63,7 +63,7 @@ class JiraTicketDescriptionParser(object):
                 close_bracket_indexes.append(i)
 
         if len(open_bracket_indexes) != len(close_bracket_indexes):
-            raise IndexError("Don't have symmetric bracket")
+            raise IndexError("Don't have symmetric brackets!")
 
         key_values = {}
         offset = 0
@@ -75,7 +75,9 @@ class JiraTicketDescriptionParser(object):
             key = nested_data[0][0].replace("{", "").strip()
             value = self.__reformat(list_of_key_values=nested_data[1:])
             key_values[key] = value
-        return {**key_values, **self.__reformat(list_of_key_values=cleansed_data)}
+
+        key_values.update(self.__reformat(list_of_key_values=cleansed_data))
+        return key_values
 
     @staticmethod
     def __get_resource_type(parameters):
@@ -101,12 +103,12 @@ class JiraTicketDescriptionParser(object):
                 "protocol" in keys and
                 "deregistration_delay" in keys
         ):
-            return "Target Group"
+            return "TG"
         elif (
                 "port" in keys and
                 "protocol" in keys
         ):
-            return "Listener"
+            return "LISTENER"
         elif (
                 "identifier" in keys and
                 "allocated_storage" in keys and
@@ -116,7 +118,7 @@ class JiraTicketDescriptionParser(object):
                 "instance_class" in keys and
                 "maintenance_window" in keys
         ):
-            return "RDS Postgres"
+            return "RDS"
         else:
             return "UNKNOWN"
 

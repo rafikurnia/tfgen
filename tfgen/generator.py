@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 
 from jinja2 import FileSystemLoader, Environment
@@ -6,7 +8,8 @@ from jinja2 import FileSystemLoader, Environment
 class CodeGenerator(object):
     def __init__(self):
         dir_path = os.path.dirname(os.path.realpath(__file__))
-        loader = FileSystemLoader("{}/template/".format(dir_path))
+        print("{}/templates/".format(dir_path))
+        loader = FileSystemLoader("{}/templates/".format(dir_path))
         self.environment = Environment(loader=loader)
 
     def __render(self, template, context):

@@ -1,6 +1,3 @@
-import json
-import os
-
 from jira import JIRA
 
 
@@ -142,20 +139,3 @@ class JiraTicketDescriptionParser(object):
                 tf_codes.append(parsed)
                 offset = new_offset
         return [{self.__get_resource_type(x): x} for x in filter(None, tf_codes)]
-
-
-if __name__ == "__main__":
-    config_file = os.getenv("HOME") + "/.opscli/config.json"
-    with open(config_file) as json_data:
-        config = json.load(json_data)
-
-    output = JiraTicketDescriptionParser(
-        server=config["jira"]["server"],
-        project=config["jira"]["project"],
-        username=config["jira"]["username"],
-        password=config["jira"]["password"],
-    ).parse(
-        ticket_id="TOSD-3310"
-    )
-
-    print(json.dumps(output, indent=4))

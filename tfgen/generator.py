@@ -3,14 +3,15 @@
 import os
 
 from jinja2 import FileSystemLoader, Environment
+from tfgen.client import AWSClient
 
 
 class CodeGenerator(object):
     def __init__(self):
         dir_path = os.path.dirname(os.path.realpath(__file__))
-        print("{}/templates/".format(dir_path))
         loader = FileSystemLoader("{}/templates/".format(dir_path))
         self.environment = Environment(loader=loader)
+        self.client = AWSClient()
 
     def __render(self, template, context):
         return self.environment.get_template(template).render(context)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from setuptools import setup, find_packages
+
 from tfgen import VERSION
 
 setup(
@@ -15,6 +16,7 @@ setup(
     install_requires=[
         "jira==1.0.15",
         "Jinja2==2.10",
+        "boto3==1.7.14",
     ],
     package_data={
         "tfgen": ["templates/*.jinja2"],
